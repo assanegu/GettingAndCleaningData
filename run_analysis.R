@@ -1,0 +1,111 @@
+## Getting and Cleaning finalData Course Project
+
+## 1. Merges the training and the test sets to create one data set.
+# create a new directory if not exist
+if(!file.exists("./projectdata")){
+      dir.create("./projectdata")
+}
+
+# Download and unsiz the file
+dataUrlLing <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
+download.file(dataUrlLing, destfile="./projectdata/FileData.zip", method="curl")
+unzip(zipfile="./projectdata/FileData.zip",exdir="./projectdata")
+
+
+# In this section, we will  merge the following files:
+# 1. test/subject_test.txt
+# 2. train/subject_train.txt
+# 3. test/X_test.txt
+# 4. train/X_train.txt
+# 5. test/y_test.txt
+# 6. train/y_train.txt
+
+#-------------------------------------------------------------------
+#|            subject         |     activity       |   feature.txt  |  
+#-----------------------------|--------------------|----------------|
+#|                            |                    |                |
+#|       subject_test.txt     |    y_test.txt      |   X_test.txt   | 
+#|                            |                    |                |
+#-----------------------------|--------------------|----------------|
+#|                            |                    |                |
+#|      subject_test.txt      |   y_train.txt      |   X_test.txt   | 
+#|                            |                    |                |
+# -------------------------------------------------------------------
+
+
+# This fnction will return the data ride from the file.
+library(data.table)
+library(plyr)
+readFileInTable <- function( subDirectory="", fileName="") {
+      filePath <- file.path("./projectdata" , "UCI HAR Dataset")
+      read.table(file.path(filePath, subDirectory , fileName ),header = FALSE)
+}
+
+# Read the header column names from activity_labels.txt" and features.txt
+activityLabelsData  <- readFileInTable("", "activity_labels.txt")
+featuresLabelsData  <- readFileInTable("" , "features.txt")
+#featuresLabelsData$V2
+#featuresLabelsData[, 2]
+
+# We will first read all the files into different data.table variable as follow:
+featuresTestData  <- readFileInTable("test" , "X_test.txt" )
+featuresTrainData <- readFileInTable("train", "X_train.txt")
+
+activityTestData  <- readFileInTable("test" , "Y_test.txt" )
+activityTrainData <- readFileInTable("train", "Y_train.txt")
+
+subjectTrainData  <- readFileInTable("train", "subject_train.txt")
+subjectTestData   <- readFileInTable("test" , "subject_test.txt")
+
+
+# Merge the files
+features <- rbind(featuresTestData, featuresTrainData)
+activity <- rbind(activityTestData, activityTrainData)
+subject  <- rbind(subjectTestData,  subjectTrainData)
+
+names(features) <- featuresLabelsData$V2
+names(activity) <- c( "activity")
+names(subject) <- c( "subject") 
+
+mergeSubActionData <- cbind(subject,  activity)
+finalData          <- cbind(features, mergeSubActionData)
+##names(finalData)   <- c(featuresLabelsData$V2, "subject", "activity")
+
+
+# create a feature names logical vector 
+filterNameData <- sapply(featuresLabelsData[,2], function(s) { grepl('(mean|std)', s, ignore.case = T) })
+finalData <- finalData[, filterNameData]
+
+
+## 2. Extracts only the measurements on the mean and standard deviation for each measurement. 
+subFeaturesData<-featuresLabelsData$V2[grep("mean\\(\\)|std\\(\\)", featuresLabelsData$V2)]
+selectedNames<-c(as.character(subFeaturesData), "subject", "activity" )
+finalData<-subset(finalData,select=selectedNames)
+str(finalData)
+
+
+## 3. Uses descriptive activity names to name the activities in the data set
+finalData$activity[finalData$activity==1] <- "Walking"
+finalData$activity[finalData$activity==2] <- "Walking Upstairs"
+finalData$activity[finalData$activity==3] <- "Walking Downstairs"
+finalData$activity[finalData$activity==4] <- "Sitting"
+finalData$activity[finalData$activity==5] <- "Standing"
+finalData$activity[finalData$activity==6] <- "Laying"
+
+#head(finalData$activity,30)
+
+## 4. Appropriately labels the data set with descriptive variable names. 
+# In this section we will rename all the variable that does not have a proper name using regex
+
+names(finalData) <- gsub("^t",       "time",          names(finalData))
+names(finalData) <- gsub("^f",       "frequency",     names(finalData))
+names(finalData) <- gsub("BodyBody", "Body",          names(finalData))
+names(finalData) <- gsub("Gyro",     "Gyroscope",     names(finalData))
+names(finalData) <- gsub("Acc",      "Accelerometer", names(finalData))
+names(finalData) <- gsub("Mag",      "Magnitude",     names(finalData))
+
+
+## 5. From the data set in step 4, creates a second, independent tidy data set 
+newAggregateData <- ddply(finalData, .(activity, subject), numcolwise(mean))
+write.table(newAggregateData, file = "tidydatafile.txt",row.name=FALSE)
+
